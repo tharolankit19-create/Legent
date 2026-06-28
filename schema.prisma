@@ -1,0 +1,61 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  published Boolean  @default(false)
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Legent — Waitlist signups
+model Waitlist {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  referralCode String   @unique
+  referredBy   String?
+  source       String   @default("website")
+  createdAt    DateTime @default(now())
+}
+
+// Legent — Early access buyers (Dodo Payments)
+model EarlyAccess {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  dodoPaymentId String?  @unique
+  amount        Int      @default(2900)
+  status        String   @default("pending")
+  createdAt     DateTime @default(now())
+}
+
+// Legent — Roadmap item votes (one per IP+itemId to prevent double-voting)
+model RoadmapVote {
+  id        String   @id @default(cuid())
+  itemId    String
+  voterHash String
+  createdAt DateTime @default(now())
+
+  @@unique([itemId, voterHash])
+  @@index([itemId])
+}
