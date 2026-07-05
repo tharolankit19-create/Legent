@@ -1,5 +1,5 @@
-// Legent — AI Agent Social Media SaaS
-// Prisma Schema v1 (MVP July 2026)
+// Legent — AI-agent-first social media management SaaS
+// Phase 1 MVP schema for Neon PostgreSQL + Prisma ORM.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,95 +10,147 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PlanType {
+  FREE
+  STARTER
+  PRO
+  EARLY_ACCESS
+}
+
+enum PlanStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  INCOMPLETE
+}
+
+enum Platform {
+  X
+  LINKEDIN
+  INSTAGRAM
+  THREADS
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+enum AgentDraftStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum PaymentProvider {
+  DODO
+}
+
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id            String   @id @default(cuid())
+  email         String   @unique
   name          String?
   avatar        String?
-  passwordHash  String?   // For email/password auth
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  image         String?
+  passwordHash  String?
+  emailVerified DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  // Relations
-  organizations Organization[]
-  accounts      Account[]
-  sessions      Session[]
+  organization Organization?
+  accounts     Account[]
+  sessions     Session[]
+  waitlistEntry WaitlistEntry?
+
+  @@index([email])
 }
 
 model Organization {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
   name        String
-  userId      String
-  planType    String   @default("FREE") // FREE | STARTER | PRO | EARLY_ACCESS
-  planStatus  String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  userId      String     @unique
+  planType    PlanType   @default(FREE)
+  planStatus  PlanStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscription Subscription?
-  integrations Integration[]
-  posts        Post[]
-  agentDrafts  AgentDraft[]
-  analytics    Analytics[]   // via posts
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription  Subscription?
+  integrations  Integration[]
+  posts         Post[]
+  agentDrafts   AgentDraft[]
 
-  @@index([userId])
+  @@index([planType, planStatus])
 }
 
 model Subscription {
-  id                 String    @id @default(cuid())
-  orgId              String    @unique
-  dodoSubscriptionId String?   @unique
-  planType           String    // STARTER | PRO | EARLY_ACCESS
-  status             String    // active | canceled | past_due
+  id                 String          @id @default(cuid())
+  orgId              String          @unique
+  provider           PaymentProvider @default(DODO)
+  dodoSubscriptionId String?         @unique
+  dodoCustomerId     String?
+  planType           PlanType
+  status             PlanStatus      @default(ACTIVE)
   currentPeriodEnd   DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([status])
 }
 
 model Integration {
   id           String   @id @default(cuid())
   orgId        String
-  platform     String   // X | LINKEDIN | INSTAGRAM | THREADS
-  accessToken  String   // Encrypted
-  refreshToken String?  // Encrypted
+  platform     Platform
+  accessToken  String   @db.Text
+  refreshToken String?  @db.Text
   username     String?
   avatar       String?
   isActive     Boolean  @default(true)
+  expiresAt    DateTime?
+  scopes       String[] @default([])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@unique([orgId, platform])
-  @@index([orgId])
+  @@index([orgId, isActive])
 }
 
 model Post {
-  id           String    @id @default(cuid())
-  orgId        String
-  content      String    @db.Text
-  platforms    String[]  // Array of platforms
-  scheduledAt  DateTime?
-  publishedAt  DateTime?
-  status       String    @default("DRAFT") // DRAFT | SCHEDULED | PUBLISHED | FAILED
-  aiScore      Int?      // 1-10
-  aiSuggestions Json?    // JSON array of suggestions
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String     @id @default(cuid())
+  orgId         String
+  agentDraftId  String?
+  content       String     @db.Text
+  platforms     Platform[]
+  scheduledAt   DateTime?
+  publishedAt   DateTime?
+  status        PostStatus @default(DRAFT)
+  aiScore       Int?
+  aiSuggestions Json?
+  failureReason String?    @db.Text
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agentDraft   AgentDraft?  @relation(fields: [agentDraftId], references: [id], onDelete: SetNull)
   analytics    Analytics[]
 
   @@index([orgId, status])
   @@index([scheduledAt])
+  @@index([publishedAt])
 }
 
 model Analytics {
   id          String   @id @default(cuid())
   postId      String
-  platform    String
+  platform    Platform
   impressions Int      @default(0)
   engagements Int      @default(0)
   clicks      Int      @default(0)
@@ -106,26 +158,46 @@ model Analytics {
 
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
+  @@unique([postId, platform, fetchedAt])
   @@index([postId])
-  @@index([fetchedAt])
+  @@index([platform, fetchedAt])
 }
 
 model AgentDraft {
-  id            String   @id @default(cuid())
+  id            String           @id @default(cuid())
   orgId         String
   weekStartDate DateTime
-  posts         Json     // Array of { day, content, suggestedTime, rationale, confidenceScore }
-  status        String   @default("PENDING_APPROVAL") // PENDING_APPROVAL | APPROVED | REJECTED
-  agentNotes    String?  @db.Text
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  posts         Json
+  status        AgentDraftStatus @default(PENDING_APPROVAL)
+  agentNotes    String?          @db.Text
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  scheduledPosts Post[]
 
+  @@unique([orgId, weekStartDate])
   @@index([orgId, status])
 }
 
-// NextAuth.js required models
+model WaitlistEntry {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  userId           String?  @unique
+  referralCode     String   @unique
+  referredByCode   String?
+  referralCount    Int      @default(0)
+  earlyAccessPaid  Boolean  @default(false)
+  dodoPaymentId    String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([referredByCode])
+}
+
+// NextAuth.js adapter models. Legent uses JWT sessions, but these are kept for OAuth account linking.
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -143,6 +215,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -150,7 +223,10 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model VerificationToken {
