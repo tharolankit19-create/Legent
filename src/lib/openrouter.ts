@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_API_BASE = process.env.OPENROUTER_API_BASE ?? "https://openrouter.ai";
+const OPENROUTER_API_URL = `${OPENROUTER_API_BASE}/api/v1/chat/completions`;
 const DEFAULT_MODEL = "anthropic/claude-sonnet-4-5";
 
 export const platformSchema = z.enum(["X", "LINKEDIN", "INSTAGRAM", "THREADS"]);
@@ -19,8 +20,33 @@ export type OptimizeInput = {
 };
 
 export type OptimizeResult = z.infer<typeof optimizeResultSchema>;
+export type ComposeFeedback = z.infer<typeof composeFeedbackSchema>;
 export type AgentDraftPost = z.infer<typeof agentDraftPostSchema>;
 export type AgentDraftResult = z.infer<typeof agentDraftResultSchema>;
+
+export const composeFeedbackSchema = z.object({
+  score: z.number().int().min(1).max(10),
+  issues: z.array(z.string()),
+  suggestions: z.array(z.string()),
+  rewrites: z.object({
+    X: z.string(),
+    LINKEDIN: z.string(),
+  }),
+});
+
+const composeFeedbackSystemPrompt = `You are a social media expert for indie hackers and SaaS founders.
+Analyze this post for engagement, clarity, authenticity, and no engagement bait.
+Return ONLY valid JSON (no markdown, no preamble):
+{
+  "score": <integer 1-10>,
+  "issues": [<list of concrete issues>],
+  "suggestions": [<list of specific improvements>],
+  "rewrites": {
+    "X": <rewrite for X, max 280 chars, punchy>,
+    "LINKEDIN": <rewrite for LinkedIn, professional but human tone>
+  }
+}
+Be specific, not generic. Founders hate vague advice.`;
 
 export const optimizeSystemPrompt = `You are a social media expert for indie hackers and SaaS founders.
 Analyze this post and return a JSON object with:
@@ -126,6 +152,18 @@ export class OpenRouterClient {
 
     const json = openRouterResponseSchema.parse(await response.json());
     return parseJsonPayload(json.choices[0].message.content, schema);
+  }
+
+  composeFeedback(content: string) {
+    return this.createJsonCompletion({
+      schema: composeFeedbackSchema,
+      temperature: 0.3,
+      maxTokens: 800,
+      messages: [
+        { role: "system", content: composeFeedbackSystemPrompt },
+        { role: "user", content: `Post content:\n${content}\nAnalyze it.` },
+      ],
+    });
   }
 
   optimizePost(input: OptimizeInput) {

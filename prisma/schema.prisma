@@ -36,6 +36,7 @@ enum PostStatus {
   DRAFT
   SCHEDULED
   PUBLISHED
+  PUBLISHED_PARTIAL
   FAILED
 }
 
@@ -77,10 +78,12 @@ model User {
 
 model Organization {
   id          String     @id @default(cuid())
-  name        String
-  userId      String     @unique
-  planType    PlanType   @default(FREE)
-  planStatus  PlanStatus @default(ACTIVE)
+  name            String
+  userId          String     @unique
+  planType        PlanType   @default(FREE)
+  planStatus      PlanStatus @default(ACTIVE)
+  notifyOnPublish Boolean    @default(true)
+  weeklyDigest    Boolean    @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -99,6 +102,8 @@ model Subscription {
   provider           PaymentProvider @default(DODO)
   dodoSubscriptionId String?         @unique
   dodoCustomerId     String?
+  dodoPaymentId      String?         @unique
+  paidAt             DateTime?
   planType           PlanType
   status             PlanStatus      @default(ACTIVE)
   currentPeriodEnd   DateTime?
@@ -118,6 +123,7 @@ model Integration {
   refreshToken String?  @db.Text
   username     String?
   avatar       String?
+  externalId   String?
   isActive     Boolean  @default(true)
   expiresAt    DateTime?
   scopes       String[] @default([])
@@ -134,14 +140,16 @@ model Post {
   id            String     @id @default(cuid())
   orgId         String
   agentDraftId  String?
-  content       String     @db.Text
-  platforms     Platform[]
-  scheduledAt   DateTime?
-  publishedAt   DateTime?
-  status        PostStatus @default(DRAFT)
-  aiScore       Int?
-  aiSuggestions Json?
-  failureReason String?    @db.Text
+  content         String     @db.Text
+  platforms       Platform[]
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  status          PostStatus @default(DRAFT)
+  aiScore         Int?
+  aiSuggestions   Json?
+  failureReason   String?    @db.Text
+  platformPostIds Json?
+  qstashMessageId String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -161,6 +169,9 @@ model Analytics {
   impressions Int      @default(0)
   engagements Int      @default(0)
   clicks      Int      @default(0)
+  likes       Int      @default(0)
+  replies     Int      @default(0)
+  reposts     Int      @default(0)
   fetchedAt   DateTime @default(now())
 
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)

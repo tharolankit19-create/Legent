@@ -3,7 +3,11 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { encrypt } from "@/lib/encryption";
 import { kvDel, kvGet } from "@/lib/redis";
-import { exchangeCodeForToken, fetchXUser, X_SCOPES } from "@/lib/x-oauth";
+import {
+  exchangeLinkedInCode,
+  fetchLinkedInUser,
+  LINKEDIN_SCOPES,
+} from "@/lib/linkedin-oauth";
 
 function appUrl(): string {
   return (
@@ -25,9 +29,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
 
-  // X returns ?error=access_denied if the user declines authorization.
   if (searchParams.get("error")) {
-    return redirectWithError("X authorization was cancelled.");
+    return redirectWithError("LinkedIn authorization was cancelled.");
   }
 
   const code = searchParams.get("code");
@@ -36,46 +39,36 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Missing code or state", { status: 400 });
   }
 
-  // Validate state (CSRF) against the value we stored before redirecting.
-  const stored = await kvGet(`oauth:x:${user.id}`);
-  if (!stored) {
+  const expectedState = await kvGet(`oauth:linkedin:${user.id}`);
+  if (!expectedState) {
     return new NextResponse("OAuth session expired or not found", { status: 400 });
   }
-
-  let codeVerifier: string;
-  let expectedState: string;
-  try {
-    const parsed = JSON.parse(stored) as { codeVerifier: string; state: string };
-    codeVerifier = parsed.codeVerifier;
-    expectedState = parsed.state;
-  } catch {
-    return new NextResponse("Corrupt OAuth session", { status: 400 });
-  }
-
   if (state !== expectedState) {
     return new NextResponse("Invalid state parameter", { status: 400 });
   }
 
-  // One-time use: consume the stored PKCE state regardless of outcome below.
-  await kvDel(`oauth:x:${user.id}`);
+  // One-time use.
+  await kvDel(`oauth:linkedin:${user.id}`);
 
   try {
-    const tokens = await exchangeCodeForToken({ code, codeVerifier });
-    const profile = await fetchXUser(tokens.access_token);
+    const tokens = await exchangeLinkedInCode(code);
+    const profile = await fetchLinkedInUser(tokens.access_token);
+    const displayName = profile.name ?? profile.given_name ?? profile.email ?? "LinkedIn user";
 
-    const grantedScopes = tokens.scope ? tokens.scope.split(" ") : X_SCOPES;
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+    const grantedScopes = tokens.scope ? tokens.scope.split(/[ ,]+/) : LINKEDIN_SCOPES;
 
     await db.integration.upsert({
-      where: { orgId_platform: { orgId: user.organization.id, platform: "X" } },
+      where: { orgId_platform: { orgId: user.organization.id, platform: "LINKEDIN" } },
       create: {
         orgId: user.organization.id,
-        platform: "X",
+        platform: "LINKEDIN",
         accessToken: encrypt(tokens.access_token),
+        // LinkedIn issues no refresh token on the self-serve tier.
         refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
-        username: profile.username,
-        avatar: profile.profile_image_url ?? null,
-        externalId: profile.id,
+        username: displayName,
+        avatar: profile.picture ?? null,
+        externalId: profile.sub,
         expiresAt,
         scopes: grantedScopes,
         isActive: true,
@@ -83,9 +76,9 @@ export async function GET(request: NextRequest) {
       update: {
         accessToken: encrypt(tokens.access_token),
         refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : null,
-        username: profile.username,
-        avatar: profile.profile_image_url ?? null,
-        externalId: profile.id,
+        username: displayName,
+        avatar: profile.picture ?? null,
+        externalId: profile.sub,
         expiresAt,
         scopes: grantedScopes,
         isActive: true,
@@ -93,11 +86,16 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.redirect(
-      new URL(`/integrations?success=${encodeURIComponent(`Connected as @${profile.username}`)}`, appUrl()),
+      new URL(
+        `/integrations?success=${encodeURIComponent(`Connected as ${displayName}`)}`,
+        appUrl(),
+      ),
     );
   } catch (error) {
-    // Never leak token material; log a generic reason only.
-    console.error("[x/callback] OAuth exchange failed:", error instanceof Error ? error.message : "unknown");
-    return redirectWithError("Could not connect X. Please try again.");
+    console.error(
+      "[linkedin/callback] OAuth exchange failed:",
+      error instanceof Error ? error.message : "unknown",
+    );
+    return redirectWithError("Could not connect LinkedIn. Please try again.");
   }
 }

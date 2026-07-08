@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 export type PlatformCard = {
   platform: "X" | "LINKEDIN" | "INSTAGRAM" | "TIKTOK" | "THREADS";
@@ -16,34 +17,26 @@ export type PlatformCard = {
 };
 
 const STATUS_STYLES: Record<PlatformCard["status"], { label: string; className: string }> = {
-  connected: { label: "Connected", className: "bg-green-500/15 text-green-400" },
-  needs_refresh: { label: "Needs refresh", className: "bg-yellow-500/15 text-yellow-400" },
-  reconnect: { label: "Reconnect", className: "bg-yellow-500/15 text-yellow-400" },
+  connected: { label: "Connected", className: "bg-green-500/15 text-green-500" },
+  needs_refresh: { label: "Needs refresh", className: "bg-yellow-500/15 text-yellow-500" },
+  reconnect: { label: "Reconnect", className: "bg-yellow-500/15 text-yellow-500" },
 };
-
-type Toast = { kind: "success" | "error"; message: string };
 
 export function IntegrationsList({ cards }: { cards: PlatformCard[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  // Surface ?success= / ?error= from the OAuth callback redirect as a toast.
-  const [toast, setToast] = useState<Toast | null>(() => {
-    const success = searchParams.get("success");
-    if (success) return { kind: "success", message: success };
-    const error = searchParams.get("error");
-    if (error) return { kind: "error", message: error };
-    return null;
-  });
   const [busy, setBusy] = useState<string | null>(null);
 
+  // Surface ?success= / ?error= from OAuth callback redirects as toasts.
   useEffect(() => {
-    if (!toast) return;
-    // Clean the query string so refreshes don't re-toast.
-    window.history.replaceState(null, "", "/integrations");
-    const timer = setTimeout(() => setToast(null), 6000);
-    return () => clearTimeout(timer);
-  }, [toast]);
+    const success = searchParams.get("success");
+    const error = searchParams.get("error");
+    if (success) toast.success(success);
+    else if (error) toast.error(error);
+    if (success || error) {
+      window.history.replaceState(null, "", "/integrations");
+    }
+  }, [searchParams]);
 
   async function disconnect(platform: string, label: string) {
     if (!window.confirm(`Disconnect ${label}? Scheduled posts to ${label} will fail.`)) return;
@@ -51,10 +44,10 @@ export function IntegrationsList({ cards }: { cards: PlatformCard[] }) {
     try {
       const res = await fetch(`/api/integrations/${platform.toLowerCase()}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      setToast({ kind: "success", message: `${label} disconnected.` });
+      toast.success(`${label} disconnected.`);
       router.refresh();
     } catch {
-      setToast({ kind: "error", message: `Failed to disconnect ${label}. Try again.` });
+      toast.error(`Failed to disconnect ${label}. Try again.`);
     } finally {
       setBusy(null);
     }
@@ -62,25 +55,13 @@ export function IntegrationsList({ cards }: { cards: PlatformCard[] }) {
 
   return (
     <div className="mt-8 space-y-4">
-      {toast && (
-        <div
-          role="status"
-          className={`rounded-md border px-4 py-3 text-sm ${
-            toast.kind === "success"
-              ? "border-green-500/30 bg-green-500/10 text-green-400"
-              : "border-destructive/30 bg-destructive/10 text-destructive"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
-
-      {cards.map((card) => {
+      {cards.map((card, index) => {
         const status = STATUS_STYLES[card.status];
         return (
           <div
             key={card.platform}
-            className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between"
+            style={{ animationDelay: `${index * 50}ms` }}
+            className="card-lift animate-fade-in-up flex flex-col gap-3 rounded-xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="flex items-center gap-3">
               {card.avatar ? (
@@ -94,7 +75,7 @@ export function IntegrationsList({ cards }: { cards: PlatformCard[] }) {
                 <p className="font-medium">{card.label}</p>
                 {card.connected && card.username ? (
                   <p className="text-sm text-muted-foreground">
-                    Connected as @{card.username}
+                    Connected as {card.platform === "X" ? `@${card.username}` : card.username}
                     {card.updatedAt && (
                       <span className="ml-2 text-xs">
                         · updated {new Date(card.updatedAt).toLocaleString()}
@@ -117,17 +98,27 @@ export function IntegrationsList({ cards }: { cards: PlatformCard[] }) {
               )}
 
               {card.connected ? (
-                <button
-                  onClick={() => disconnect(card.platform, card.label)}
-                  disabled={busy === card.platform}
-                  className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-secondary disabled:opacity-50"
-                >
-                  {busy === card.platform ? "Disconnecting…" : `Disconnect ${card.label}`}
-                </button>
+                <div className="flex gap-2">
+                  {card.status !== "connected" && (
+                    <a
+                      href={`/api/auth/${card.platform.toLowerCase()}/authorize`}
+                      className="h-12 rounded-md bg-primary px-3 py-3 text-sm font-medium text-primary-foreground hover:opacity-90"
+                    >
+                      Reconnect
+                    </a>
+                  )}
+                  <button
+                    onClick={() => disconnect(card.platform, card.label)}
+                    disabled={busy === card.platform}
+                    className="h-12 rounded-md border border-border px-3 text-sm hover:bg-secondary disabled:opacity-50"
+                  >
+                    {busy === card.platform ? "Disconnecting…" : `Disconnect ${card.label}`}
+                  </button>
+                </div>
               ) : card.available && !card.comingSoon ? (
                 <a
                   href={`/api/auth/${card.platform.toLowerCase()}/authorize`}
-                  className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                  className="flex h-12 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
                 >
                   Connect {card.label}
                 </a>
