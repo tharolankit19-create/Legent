@@ -7,7 +7,7 @@ out/
 
 # env files (never commit real secrets)
 .env
-.env*.local
+.env.local
 
 # prisma
 prisma/dev.db
