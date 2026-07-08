@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const PUBLIC_PATHS = ["/auth", "/api/auth", "/api/webhooks"];
+// /api/posts/publish is QStash-invoked: no session exists; the route itself
+// authenticates via a forwarded shared-secret header.
+const PUBLIC_PATHS = ["/auth", "/api/auth", "/api/webhooks", "/api/posts/publish"];
 
 function isPublicPath(pathname: string) {
   if (pathname === "/") return true;
@@ -30,5 +32,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/integrations/:path*", "/api/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/compose/:path*",
+    "/analytics/:path*",
+    "/integrations/:path*",
+    "/settings/:path*",
+    "/api/:path*",
+  ],
 };

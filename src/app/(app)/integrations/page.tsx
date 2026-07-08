@@ -3,10 +3,15 @@ import { db } from "@/lib/db";
 import { IntegrationsList, type PlatformCard } from "./integrations-list";
 
 const REFRESH_WINDOW_MS = 60 * 60 * 1000;
+const LINKEDIN_RECONNECT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
-function statusFor(isActive: boolean, expiresAt: Date | null): PlatformCard["status"] {
+function statusFor(
+  isActive: boolean,
+  expiresAt: Date | null,
+  staleWindowMs: number,
+): PlatformCard["status"] {
   if (!isActive) return "reconnect";
-  if (expiresAt && expiresAt.getTime() <= Date.now() + REFRESH_WINDOW_MS) return "needs_refresh";
+  if (expiresAt && expiresAt.getTime() <= Date.now() + staleWindowMs) return "needs_refresh";
   return "connected";
 }
 
@@ -31,7 +36,7 @@ export default async function IntegrationsPage() {
       username: x?.username ?? null,
       avatar: x?.avatar ?? null,
       updatedAt: x?.updatedAt.toISOString() ?? null,
-      status: x ? statusFor(x.isActive, x.expiresAt) : "connected",
+      status: x ? statusFor(x.isActive, x.expiresAt, REFRESH_WINDOW_MS) : "connected",
     },
     {
       platform: "LINKEDIN",
@@ -41,8 +46,9 @@ export default async function IntegrationsPage() {
       username: linkedin?.username ?? null,
       avatar: linkedin?.avatar ?? null,
       updatedAt: linkedin?.updatedAt.toISOString() ?? null,
-      status: linkedin ? statusFor(linkedin.isActive, linkedin.expiresAt) : "connected",
-      comingSoon: true, // wired in Phase 1.2.3
+      status: linkedin
+        ? statusFor(linkedin.isActive, linkedin.expiresAt, LINKEDIN_RECONNECT_WINDOW_MS)
+        : "connected",
     },
     { platform: "INSTAGRAM", label: "Instagram", available: false, connected: false, username: null, avatar: null, updatedAt: null, status: "connected", comingSoon: true },
     { platform: "TIKTOK", label: "TikTok", available: false, connected: false, username: null, avatar: null, updatedAt: null, status: "connected", comingSoon: true },
@@ -50,20 +56,13 @@ export default async function IntegrationsPage() {
   ];
 
   return (
-    <div className="min-h-screen">
-      <nav className="flex items-center justify-between border-b border-border px-6 py-4">
-        <span className="text-lg font-semibold text-primary">Legent</span>
-        <span className="text-sm text-muted-foreground">{user.organization?.name}</span>
-      </nav>
+    <div className="mx-auto max-w-3xl">
+      <h1 className="text-2xl font-semibold">Integrations</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Connect the platforms you want Legent to publish to.
+      </p>
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-semibold">Integrations</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Connect the platforms you want Legent to publish to.
-        </p>
-
-        <IntegrationsList cards={cards} />
-      </main>
+      <IntegrationsList cards={cards} />
     </div>
   );
 }

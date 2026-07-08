@@ -12,9 +12,11 @@ import { encrypt, decrypt } from "@/lib/encryption";
  * from the original spec, which does not resolve.
  */
 
+const X_API_BASE = process.env.X_API_BASE ?? "https://api.twitter.com";
+
 export const X_AUTHORIZE_URL = "https://twitter.com/i/oauth2/authorize";
-export const X_TOKEN_URL = "https://api.twitter.com/2/oauth2/token";
-export const X_USERS_ME_URL = "https://api.twitter.com/2/users/me";
+export const X_TOKEN_URL = `${X_API_BASE}/2/oauth2/token`;
+export const X_USERS_ME_URL = `${X_API_BASE}/2/users/me`;
 
 // offline.access is REQUIRED for X to return a refresh_token.
 export const X_SCOPES = [
