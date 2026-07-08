@@ -1,0 +1,16 @@
+# Legent
+
+> Post to 10 platforms from one box. AI flags what will flop before you hit publish. Built for solo SaaS founders, not agencies. $29 lifetime early access.
+
+Legent is a social media management tool for indie founders. Write your post once, and Legent reshapes it for X, LinkedIn, Threads, Instagram, Facebook, TikTok, YouTube, Pinterest, Bluesky, and Mastodon. An AI optimizer scores posts before you publish. Founders save roughly 6 hours per month vs. reformatting by hand.
+
+## Pages
+
+- [Home](/): Product overview, features, pricing, ROI calculator, and FAQ.
+- [Founder story](/founder): Ankit Tharol's story — 16, building from India, third startup after two shutdowns.
+- [Privacy policy](/privacy): How we handle data.
+- [Terms of service](/terms): Terms for the $29 lifetime early-access purchase.
+
+## Optional
+
+- [Thank you](/thank-you): Post-purchase confirmation page.
