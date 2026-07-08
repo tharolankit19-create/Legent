@@ -1,31 +1,37 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { loginSchema, type LoginInput } from "@/lib/validations";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    setIsSubmitting(true);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginInput>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
+  });
+
+  async function onSubmit(values: LoginInput) {
+    setFormError(null);
 
     const result = await signIn("credentials", {
-      email,
-      password,
+      email: values.email,
+      password: values.password,
       redirect: false,
     });
 
     if (result?.error) {
-      setError("Invalid email or password.");
-      setIsSubmitting(false);
+      setFormError("Invalid email or password.");
       return;
     }
 
@@ -38,7 +44,7 @@ export default function LoginPage() {
       <h1 className="mb-1 text-xl font-semibold">Welcome back</h1>
       <p className="mb-6 text-sm text-muted-foreground">Log in to your Legent account.</p>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div>
           <label htmlFor="email" className="mb-1 block text-sm font-medium">
             Email
@@ -46,30 +52,38 @@ export default function LoginPage() {
           <input
             id="email"
             type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            {...register("email")}
             className="w-full rounded-md border border-input bg-secondary px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
             placeholder="you@example.com"
           />
+          {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email.message}</p>}
         </div>
 
         <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-medium">
-            Password
-          </label>
+          <div className="mb-1 flex items-center justify-between">
+            <label htmlFor="password" className="block text-sm font-medium">
+              Password
+            </label>
+            <span
+              title="Password reset arrives in a later phase."
+              className="cursor-not-allowed text-xs text-muted-foreground"
+            >
+              Forgot password?
+            </span>
+          </div>
           <input
             id="password"
             type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            {...register("password")}
             className="w-full rounded-md border border-input bg-secondary px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
             placeholder="••••••••"
           />
+          {errors.password && (
+            <p className="mt-1 text-sm text-destructive">{errors.password.message}</p>
+          )}
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {formError && <p className="text-sm text-destructive">{formError}</p>}
 
         <button
           type="submit"
