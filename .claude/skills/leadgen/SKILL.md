@@ -1,6 +1,6 @@
 ---
 name: leadgen
-description: Pull 100+ high-intent leads for Legent (SaaS founders, indie hackers, AI founders) from Apollo, score them by intent, output a ranked CSV plus cold email drafts. Trigger on "/leadgen", "pull leads", "get me leads".
+description: Pull 100+ high-intent leads for Legent (SaaS founders, indie hackers, AI founders) from Product Hunt launches + website email enrichment (free sources), score them by intent, output a ranked CSV plus cold email drafts. Trigger on "/leadgen", "pull leads", "get me leads".
 ---
 
 # Legent Lead Gen
@@ -13,11 +13,14 @@ Keywords: saas, ai, indie, bootstrapped, micro-saas, developer tools
 Geo: US, UK, Canada, India, Germany, Australia
 
 ## Workflow
-1. Run `python scripts/apollo_pull.py` → writes `data/raw_leads.json` (250 raw)
+1. Pull + enrich (free sources — no paid API):
+   a. Run `python scripts/ph_pull.py --limit 60` → queries Product Hunt (last 90 days, ICP topics), dedupes by resolved website domain, writes `data/raw_leads.json`.
+   b. Run `python scripts/enrich_email.py` → visits each site (/, /about, /contact, /team), robots-respecting, ~1 req/sec, adds a personal `email` field in place. Leads with no personal email get `email: null`.
+   Requires `PRODUCT_HUNT_TOKEN` in the environment (free developer token from https://www.producthunt.com/v2/oauth/applications).
 2. Read `data/raw_leads.json` yourself. Score EVERY lead 0-100 using the rubric below. Do NOT call any external API for scoring — you are the scorer.
 3. Write scored output to `data/scored_leads.csv` with columns:
    name,title,company,employees,email,linkedin,website,intent_score,reason,hook
-4. Keep only score >= 40. If fewer than 100 survive, re-run apollo_pull.py with `--page 2` and repeat.
+4. Keep only score >= 40. If fewer than 100 survive, re-run ph_pull.py with a larger `--limit` (e.g. 120) then enrich_email.py again, and repeat.
 5. Run `python scripts/report.py` → prints top 20 to terminal.
 6. Draft cold emails for the top 25 using the template below. Save to `data/emails.md`.
 7. Report: total pulled, total qualified, avg score, top 5 names.
